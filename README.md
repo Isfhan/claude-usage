@@ -3,17 +3,15 @@
 Shows your live Claude **5-hour session usage** — a mini progress bar plus
 percent and a live countdown to reset — right in the macOS menu bar.
 
-```
-▇▇▇▇▇▇▁▁  92% · 1h29m
-```
+![Claude Usage in the menu bar](docs/screenshot.png)
 
 > Unofficial: reads the same claude.ai usage endpoint the Settings → Usage page
 > uses, via your own `sessionKey`. Not affiliated with Anthropic.
 
-The app is signed with a Developer ID and **notarized by Apple**, so it opens
-normally — no Gatekeeper workarounds.
+## Install
 
-### Homebrew
+Requires macOS 13+ and [Homebrew](https://brew.sh) (install Homebrew first if you
+don't have it). Then run:
 
     brew tap sven1603/claude-usage
     brew trust --tap sven1603/claude-usage
