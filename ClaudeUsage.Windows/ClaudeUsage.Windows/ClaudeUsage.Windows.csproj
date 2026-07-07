@@ -1,14 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>Icons\app.ico</ApplicationIcon>
+    <ApplicationIcon>app.ico</ApplicationIcon>
     <AssemblyName>ClaudeUsage</AssemblyName>
-    <RootNamespace>ClaudeUsage</RootNamespace>
+    <RootNamespace>ClaudeUsage.Windows</RootNamespace>
     <Version>1.0.0</Version>
     <Authors>Sven and Isfhan</Authors>
     <Description>Claude Usage Monitor for Windows</Description>

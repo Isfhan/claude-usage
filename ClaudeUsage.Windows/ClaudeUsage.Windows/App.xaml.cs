@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace ClaudeUsage
+namespace ClaudeUsage.Windows
 {
     public partial class App : Application
     {
