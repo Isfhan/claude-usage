@@ -44,6 +44,10 @@ struct SettingsView: View {
                     let keyOK = Keychain.write(keyValue, account: "sessionKey")
                     let orgOK = Keychain.write(orgValue, account: "orgUUID")
                     status = (keyOK && orgOK) ? .saved : .failed
+                    if keyOK && orgOK {
+                        // Tell the running model to re-read the Keychain now.
+                        NotificationCenter.default.post(name: .claudeCredentialsChanged, object: nil)
+                    }
                 }
                 switch status {
                 case .saved: Text("Saved").foregroundStyle(.green).font(.caption)

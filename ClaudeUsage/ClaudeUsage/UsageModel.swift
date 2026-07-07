@@ -2,6 +2,11 @@ import Foundation
 import Combine
 import ClaudeUsageCore
 
+extension Notification.Name {
+    /// Posted by Settings after saving; tells the model to re-read the Keychain.
+    static let claudeCredentialsChanged = Notification.Name("claudeCredentialsChanged")
+}
+
 @MainActor
 final class UsageModel: ObservableObject {
     @Published private(set) var state: UsageState = .waiting
@@ -9,6 +14,12 @@ final class UsageModel: ObservableObject {
     private let client = UsageClient()
     private var pollTimer: Timer?
     private var tickTimer: Timer?
+
+    // Credentials are read from the Keychain once (at launch and whenever Settings
+    // saves), then cached here — so the 1s poll never touches the Keychain and
+    // doesn't trigger repeated access prompts.
+    private var cachedKey: String?
+    private var cachedOrg: String?
 
     // Last successful fetch snapshot (source of truth for the local tick).
     private var lastPercent: Int?
@@ -32,6 +43,7 @@ final class UsageModel: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        loadCredentials()
         recompute()
         Task { await self.refresh() }
         pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
@@ -40,6 +52,22 @@ final class UsageModel: ObservableObject {
         tickTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.recompute() }
         }
+        // Re-read the Keychain (once) when the user saves new credentials.
+        NotificationCenter.default.addObserver(
+            forName: .claudeCredentialsChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.loadCredentials()
+                self?.pinnedOrgNameCache.removeAll()
+                await self?.refresh()
+            }
+        }
+    }
+
+    /// Read credentials from the Keychain into the in-memory cache (one read each).
+    private func loadCredentials() {
+        cachedKey = Keychain.sessionKey
+        cachedOrg = Keychain.orgUUID
     }
 
     /// Re-derive the displayed state from the last snapshot + current clock.
@@ -53,12 +81,12 @@ final class UsageModel: ObservableObject {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
-        guard let key = Keychain.sessionKey, !key.isEmpty else {
+        guard let key = cachedKey, !key.isEmpty else {
             authFailed = false; lastSuccess = nil; recompute(); return
         }
         do {
             let (session, org) = try await client.resolve(
-                sessionKey: key, pinnedOrg: Keychain.orgUUID, now: Date())
+                sessionKey: key, pinnedOrg: cachedOrg, now: Date())
             lastPercent = session.percent
             lastSecondsToReset = session.secondsToReset
             lastSuccess = Date()
