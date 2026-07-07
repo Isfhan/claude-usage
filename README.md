@@ -10,17 +10,20 @@ percent and a live countdown to reset — right in the macOS menu bar.
 > Unofficial: reads the same claude.ai usage endpoint the Settings → Usage page
 > uses, via your own `sessionKey`. Not affiliated with Anthropic.
 
-## Install
+The app is signed with a Developer ID and **notarized by Apple**, so it opens
+normally — no Gatekeeper workarounds.
+
+### Homebrew
+
+    brew install --cask sven1603/claude-usage/claude-usage
+
+### Or download directly
 
 1. Download `ClaudeUsage-x.y.z.zip` from the
    [Releases](https://github.com/Sven1603/claude-usage/releases) page.
 2. Unzip it and move **Claude Usage.app** to `/Applications`.
-3. It's an unsigned hobby build, so on first launch macOS Gatekeeper will block
-   it. Either:
-   - Right-click the app in `/Applications` → **Open** → **Open**, or
-   - Clear the quarantine flag once:
-
-         xattr -dr com.apple.quarantine "/Applications/Claude Usage.app"
+3. Double-click to open (the first launch shows the standard "downloaded from
+   the internet" confirmation — click **Open**).
 
 ## Getting your `sessionKey`
 
@@ -83,10 +86,29 @@ Run the logic tests (no app build needed):
 
 ## Releasing (maintainer)
 
-1. Archive the app: Xcode → Product → Archive → Distribute App →
-   **Copy App** (no signing needed for the hobby build).
-2. Zip it: `ditto -c -k --keepParent "Claude Usage.app" ClaudeUsage-x.y.z.zip`.
-3. Create a GitHub release `vx.y.z` and attach the zip (`gh release create`).
-4. (Optional, if you later set up a Homebrew tap) compute
-   `shasum -a 256 ClaudeUsage-x.y.z.zip` and update `homebrew/claude-usage.rb`
-   (`version`, `sha256`).
+Prereqs (one-time): a **Developer ID Application** certificate and notarization
+credentials stored as the `claude-usage` keychain profile
+(`xcrun notarytool store-credentials`).
+
+    cd ClaudeUsage
+    xcodegen generate
+
+    # 1. Archive + export a Developer ID build (strips get-task-allow; hardened runtime)
+    xcodebuild -project ClaudeUsage.xcodeproj -scheme ClaudeUsage \
+      -configuration Release -destination 'generic/platform=macOS' \
+      archive -archivePath build/ClaudeUsage.xcarchive
+    xcodebuild -exportArchive -archivePath build/ClaudeUsage.xcarchive \
+      -exportPath build/export -exportOptionsPlist ExportOptions.plist
+
+    # 2. Notarize + staple
+    ditto -c -k --keepParent "build/export/Claude Usage.app" submit.zip
+    xcrun notarytool submit submit.zip --keychain-profile claude-usage --wait
+    xcrun stapler staple "build/export/Claude Usage.app"
+
+    # 3. Package the stapled app + publish
+    ditto -c -k --keepParent "build/export/Claude Usage.app" ClaudeUsage-x.y.z.zip
+    shasum -a 256 ClaudeUsage-x.y.z.zip      # update version+sha256 in the cask(s)
+    gh release create vx.y.z ClaudeUsage-x.y.z.zip
+
+Then bump `version`/`sha256` in `homebrew/claude-usage.rb` and the
+`homebrew-claude-usage` tap.
