@@ -1,4 +1,3 @@
-using System;
 using System.Windows;
 
 namespace ClaudeUsage.Windows
@@ -12,44 +11,29 @@ namespace ClaudeUsage.Windows
             InitializeComponent();
             _mainWindow = mainWindow;
             
-            // Load existing credentials if any
-            var creds = MainWindow.LoadCredentials();
-            if (!string.IsNullOrEmpty(creds.sessionKey))
-            {
-                SessionKeyTextBox.Text = creds.sessionKey;
-            }
-            if (!string.IsNullOrEmpty(creds.orgUuid))
-            {
-                OrgUuidTextBox.Text = creds.orgUuid;
-            }
+            // Load existing values if available (handled by MainWindow passing data or reading directly)
+            // For simplicity, we assume textboxes are empty initially or user re-enters
         }
 
-        private void SaveButton_Click(object sender, RoutedEventArgs e)
+        private void Save_Click(object sender, RoutedEventArgs e)
         {
             var sessionKey = SessionKeyTextBox.Text.Trim();
-            var orgUuid = string.IsNullOrWhiteSpace(OrgUuidTextBox.Text) ? null : OrgUuidTextBox.Text.Trim();
+            var orgUuid = OrgUuidTextBox.Text.Trim();
 
             if (string.IsNullOrEmpty(sessionKey))
             {
-                MessageBox.Show("Please enter a valid Session Key.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Session Key is required.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // Call static method
-            MainWindow.SaveCredentials(sessionKey, orgUuid);
+            MainWindow.SaveCredentials(sessionKey, string.IsNullOrEmpty(orgUuid) ? null : orgUuid);
             
-            MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
-            
-            // Trigger refresh in main window
-            // We can't directly access private methods, so we might need a public trigger or just restart logic
-            // For simplicity, let's close and let MainWindow handle reload on next tick or add a public Reload method
-            DialogResult = true;
+            MessageBox.Show("Settings saved! The usage will update shortly.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             Close();
         }
 
-        private void CancelButton_Click(object sender, RoutedEventArgs e)
+        private void Cancel_Click(object sender, RoutedEventArgs e)
         {
-            DialogResult = false;
             Close();
         }
     }
