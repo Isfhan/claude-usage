@@ -70,6 +70,10 @@ final class UsageModel: ObservableObject {
         }
     }
 
+    /// Whether a session key is currently stored (from the cached value — no
+    /// Keychain read). Valid immediately after init since `start()` loads it.
+    var isSignedIn: Bool { !(cachedKey ?? "").isEmpty }
+
     /// Read credentials from the Keychain into the in-memory cache (one read each).
     private func loadCredentials() {
         cachedKey = Keychain.sessionKey

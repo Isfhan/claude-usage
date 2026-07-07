@@ -16,17 +16,15 @@ normally — no Gatekeeper workarounds.
 ### Homebrew
 
     brew tap sven1603/claude-usage
+    brew trust --tap sven1603/claude-usage
     brew install claude-usage
 
-Upgrade later with `brew upgrade claude-usage`.
+The `brew trust` line is needed because this is a third-party tap (Homebrew
+requires trusting non-official taps before installing their casks). Upgrade
+later with `brew upgrade claude-usage`.
 
-### Or download directly
-
-1. Download `ClaudeUsage-x.y.z.zip` from the
-   [Releases](https://github.com/Sven1603/claude-usage/releases) page.
-2. Unzip it and move **Claude Usage.app** to `/Applications`.
-3. Double-click to open (the first launch shows the standard "downloaded from
-   the internet" confirmation — click **Open**).
+After installing, open **Claude Usage** from your Applications folder — it will
+prompt you to sign in.
 
 ## Getting your `sessionKey`
 

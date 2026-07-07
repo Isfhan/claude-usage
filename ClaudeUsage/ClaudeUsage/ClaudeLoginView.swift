@@ -76,10 +76,15 @@ struct ClaudeLoginView: View {
         VStack(spacing: 0) {
             switch vm.step {
             case .login, .notSignedIn:
+                Text("Tip: if “Continue with Google” is blocked here, use **email + login code** instead — it works in this window. Then click Done.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.top, 8)
                 if vm.step == .notSignedIn {
                     Text("Not signed in yet — finish logging in, then click Done.")
                         .font(.caption).foregroundStyle(.orange)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 10)
                 }
                 LoginWebView(webView: vm.webView)
                 HStack {
