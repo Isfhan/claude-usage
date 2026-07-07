@@ -1,6 +1,7 @@
+using System;
 using System.Windows;
 
-namespace ClaudeUsage
+namespace ClaudeUsage.Windows
 {
     public partial class SettingsWindow : Window
     {
@@ -10,29 +11,43 @@ namespace ClaudeUsage
         {
             InitializeComponent();
             _mainWindow = mainWindow;
-            Owner = mainWindow;
             
-            // Load existing values if available (simplified for brevity)
-            // In production, you'd decrypt and populate these fields
+            // Load existing credentials if any
+            var creds = MainWindow.LoadCredentials();
+            if (!string.IsNullOrEmpty(creds.sessionKey))
+            {
+                SessionKeyTextBox.Text = creds.sessionKey;
+            }
+            if (!string.IsNullOrEmpty(creds.orgUuid))
+            {
+                OrgUuidTextBox.Text = creds.orgUuid;
+            }
         }
 
-        private void Save_Click(object sender, RoutedEventArgs e)
+        private void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-            var sessionKey = SessionKeyBox.Text.Trim();
-            var orgUuid = OrgUuidBox.Text.Trim();
+            var sessionKey = SessionKeyTextBox.Text.Trim();
+            var orgUuid = string.IsNullOrWhiteSpace(OrgUuidTextBox.Text) ? null : OrgUuidTextBox.Text.Trim();
 
             if (string.IsNullOrEmpty(sessionKey))
             {
-                MessageBox.Show("Session Key is required.");
+                MessageBox.Show("Please enter a valid Session Key.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            _mainWindow.SaveCredentials(sessionKey, string.IsNullOrEmpty(orgUuid) ? null : orgUuid);
+            // Call static method
+            MainWindow.SaveCredentials(sessionKey, orgUuid);
+            
+            MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            
+            // Trigger refresh in main window
+            // We can't directly access private methods, so we might need a public trigger or just restart logic
+            // For simplicity, let's close and let MainWindow handle reload on next tick or add a public Reload method
             DialogResult = true;
             Close();
         }
 
-        private void Cancel_Click(object sender, RoutedEventArgs e)
+        private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             DialogResult = false;
             Close();
