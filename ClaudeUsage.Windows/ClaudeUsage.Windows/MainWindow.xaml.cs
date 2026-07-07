@@ -1,61 +1,87 @@
 using System;
+using System.Drawing;
+using System.IO;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Input;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Hardcodet.Wpf.TaskbarNotification;
-using Microsoft.Win32;
-using System.Security.Cryptography;
-using System.Text;
-using System.Timers;
 
 namespace ClaudeUsage.Windows
 {
     public partial class MainWindow : Window
     {
         private readonly HttpClient _httpClient = new();
-        private TaskbarIcon? _trayIcon;
-        private System.Timers.Timer? _refreshTimer;
+        private readonly DispatcherTimer _refreshTimer;
         private string? _sessionKey;
         private string? _orgUuid;
-        private double _usagePercent;
-        private DateTime _resetTime;
 
         public MainWindow()
         {
             InitializeComponent();
+            
+            _refreshTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(30)
+            };
+            _refreshTimer.Tick += async (s, e) => await RefreshUsageAsync();
+            
             LoadCredentials();
-            InitializeTrayIcon();
-            InitializeTimer();
             
             if (!string.IsNullOrEmpty(_sessionKey))
             {
                 _ = RefreshUsageAsync();
+                _refreshTimer.Start();
             }
             else
             {
-                ShowSettings();
+                OpenSettings();
             }
         }
 
-        private void InitializeTrayIcon()
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            _trayIcon = new TaskbarIcon
+            // Hide the main window, we only show the tray icon
+            this.Hide();
+            
+            if (string.IsNullOrEmpty(_sessionKey))
             {
-                IconSource = new System.Drawing.Icon("Icons/app.ico"),
-                ToolTipText = "Claude Usage: Loading..."
-            };
-
-            _trayIcon.TrayMouseDoubleClick += (s, e) => ShowDetails();
-            _trayIcon.ContextMenu = (System.Windows.Controls.ContextMenu)FindResource("TrayContextMenu");
+                OpenSettings();
+            }
+            else
+            {
+                await RefreshUsageAsync();
+            }
         }
 
-        private void InitializeTimer()
+        private void NotifyIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
         {
-            _refreshTimer = new System.Timers.Timer(30000); // 30 seconds
-            _refreshTimer.Elapsed += async (s, e) => await Dispatcher.InvokeAsync(async () => await RefreshUsageAsync());
-            _refreshTimer.Start();
+            OpenSettings();
+        }
+
+        private void ShowDetails_Click(object sender, RoutedEventArgs e)
+        {
+            OpenSettings();
+        }
+
+        private void Settings_Click(object sender, RoutedEventArgs e)
+        {
+            OpenSettings();
+        }
+
+        private void Exit_Click(object sender, RoutedEventArgs e)
+        {
+            _refreshTimer.Stop();
+            trayIcon.Dispose();
+            Application.Current.Shutdown();
+        }
+
+        private void OpenSettings()
+        {
+            var settingsWindow = new SettingsWindow(this);
+            settingsWindow.ShowDialog();
         }
 
         private async Task RefreshUsageAsync()
@@ -64,170 +90,123 @@ namespace ClaudeUsage.Windows
 
             try
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, "https://claude.ai/api/organizations");
+                var requestUrl = string.IsNullOrEmpty(_orgUuid)
+                    ? "https://claude.ai/api/organizations"
+                    : $"https://claude.ai/api/organizations/{_orgUuid}/usage";
+
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
                 request.Headers.Add("Cookie", $"sessionKey={_sessionKey}");
-                
+                request.Headers.Add("User-Agent", "Mozilla/5.0");
+
                 var response = await _httpClient.SendAsync(request);
-                if (!response.IsSuccessStatusCode) return;
-
-                var content = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(content);
-                var root = doc.RootElement;
-
-                if (root.GetArrayLength() == 0) return;
-
-                JsonElement orgElement;
-                if (!string.IsNullOrEmpty(_orgUuid))
+                
+                if (response.IsSuccessStatusCode)
                 {
-                    foreach (var elem in root.EnumerateArray())
+                    var json = await response.Content.ReadAsStringAsync();
+                    // Parse JSON to extract usage data
+                    // This is a simplified parsing logic; adjust based on actual API response structure
+                    using var doc = JsonDocument.Parse(json);
+                    
+                    double usagePercent = 0;
+                    string resetTime = "Unknown";
+
+                    if (string.IsNullOrEmpty(_orgUuid))
                     {
-                        if (elem.GetProperty("uuid").GetString() == _orgUuid)
+                        // Handle list of organizations response
+                        if (doc.RootElement.TryGetProperty("data", out var dataElement) && 
+                            dataElement.GetArrayLength() > 0)
                         {
-                            orgElement = elem;
-                            goto found;
+                            var firstOrg = dataElement[0];
+                            if (firstOrg.TryGetProperty("id", out var idElem))
+                                _orgUuid = idElem.GetString();
+                            
+                            // Recursively fetch usage for the first org if needed
+                            if (_orgUuid != null)
+                            {
+                                await RefreshUsageAsync();
+                                return;
+                            }
                         }
                     }
-                    orgElement = root[0];
+                    else
+                    {
+                        // Handle specific org usage response
+                        if (doc.RootElement.TryGetProperty("maxUsage", out var maxElem) &&
+                            doc.RootElement.TryGetProperty("currentUsage", out var currElem))
+                        {
+                            var max = maxElem.GetInt32();
+                            var current = currElem.GetInt32();
+                            usagePercent = max > 0 ? (double)current / max * 100 : 0;
+                            
+                            if (doc.RootElement.TryGetProperty("resetTime", out var resetElem))
+                                resetTime = resetElem.GetString() ?? "Unknown";
+                        }
+                    }
+
+                    // Update Tray Icon Tooltip and Title
+                    var title = $"Claude Usage: {usagePercent:F1}%";
+                    trayIcon.ToolTipText = $"{title}\nReset: {resetTime}";
+                    
+                    // Note: Updating the visual progress bar in the tray icon requires custom drawing
+                    // which is more complex. For now, we update the tooltip.
                 }
-                else
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
                 {
-                    orgElement = root[0];
-                    _orgUuid = orgElement.GetProperty("uuid").GetString();
+                    _sessionKey = null;
+                    SaveCredentials(null, null);
+                    Dispatcher.Invoke(() => OpenSettings());
                 }
-
-                found:
-                var usage = orgElement.GetProperty("usage");
-                var maxTokens = usage.GetProperty("max_tokens");
-                var usedTokens = usage.GetProperty("tokens_used_in_all_projects");
-                
-                _usagePercent = maxTokens.GetInt32() > 0 
-                    ? (double)usedTokens.GetInt64() / maxTokens.GetInt32() * 100 
-                    : 0;
-
-                var resetStr = orgElement.GetProperty("usage_limit_reset_at").GetString();
-                if (DateTime.TryParse(resetStr, out var reset))
-                    _resetTime = reset.ToLocalTime();
-
-                UpdateTrayInfo();
             }
-            catch { /* Ignore errors on background refresh */ }
+            catch (Exception ex)
+            {
+                trayIcon.ToolTipText = $"Error: {ex.Message}";
+            }
         }
 
-        private void UpdateTrayInfo()
-        {
-            if (_trayIcon == null) return;
-
-            var percentStr = _usagePercent.ToString("F1");
-            var now = DateTime.Now;
-            var remaining = _resetTime - now;
-            
-            string timeStr;
-            if (remaining.TotalHours >= 1)
-                timeStr = $"{(int)remaining.TotalHours}h {remaining.Minutes}m";
-            else if (remaining.TotalMinutes >= 1)
-                timeStr = $"{(int)remaining.TotalMinutes}m {remaining.Seconds}s";
-            else
-                timeStr = $"{remaining.Seconds}s";
-
-            _trayIcon.ToolTipText = $"Claude Usage: {percentStr}%\nResets in: {timeStr}";
-            
-            // Update title if window is open (optional)
-            Title = $"Claude Usage ({percentStr}%)";
-        }
-
-        private void Window_Loaded(object sender, RoutedEventArgs e)
-        {
-            Hide(); // Keep main window hidden, only show tray
-        }
-
-        private void NotifyIcon_TrayMouseDoubleClick(object sender, RoutedEventArgs e)
-        {
-            ShowDetails();
-        }
-
-        private void ShowDetails_Click(object sender, RoutedEventArgs e)
-        {
-            ShowDetails();
-        }
-
-        private void ShowDetails()
-        {
-            MessageBox.Show(
-                $"Usage: {_usagePercent:F1}%\n" +
-                $"Resets in: {(_resetTime - DateTime.Now):hh\\:mm\\:ss}\n\n" +
-                "Double-click tray icon to open Settings.",
-                "Claude Usage",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-
-        private void Settings_Click(object sender, RoutedEventArgs e)
-        {
-            ShowSettings();
-        }
-
-        private void ShowSettings()
-        {
-            var settingsWindow = new SettingsWindow(this);
-            settingsWindow.ShowDialog();
-        }
-
-        private void Exit_Click(object sender, RoutedEventArgs e)
-        {
-            _trayIcon?.Dispose();
-            Application.Current.Shutdown();
-        }
-
-        // --- Credential Management (Static helpers) ---
-
-        public static void SaveCredentials(string sessionKey, string? orgUuid)
+        private void LoadCredentials()
         {
             try
             {
-                var encrypted = Encrypt(sessionKey);
-                Registry.SetValue(@"HKEY_CURRENT_USER\Software\ClaudeUsage", "SessionKey", Convert.ToBase64String(encrypted));
+                var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var configPath = Path.Combine(appData, "ClaudeUsage", "config.json");
                 
-                if (!string.IsNullOrEmpty(orgUuid))
+                if (File.Exists(configPath))
                 {
-                    var encryptedOrg = Encrypt(orgUuid);
-                    Registry.SetValue(@"HKEY_CURRENT_USER\Software\ClaudeUsage", "OrgUuid", Convert.ToBase64String(encryptedOrg));
-                }
-                else
-                {
-                    Registry.CurrentUser.CreateSubKey(@"Software\ClaudeUsage").DeleteValue("OrgUuid", false);
+                    var json = File.ReadAllText(configPath);
+                    using var doc = JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("sessionKey", out var sk))
+                        _sessionKey = sk.GetString();
+                    if (doc.RootElement.TryGetProperty("orgUuid", out var org))
+                        _orgUuid = org.GetString();
                 }
             }
-            catch { /* Ignore registry errors */ }
+            catch
+            {
+                // Ignore errors loading credentials
+            }
         }
 
-        public void LoadCredentials()
+        public static void SaveCredentials(string? sessionKey, string? orgUuid)
         {
             try
             {
-                var keyVal = Registry.GetValue(@"HKEY_CURRENT_USER\Software\ClaudeUsage", "SessionKey", null);
-                if (keyVal is string keyStr)
+                var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                var dir = Path.Combine(appData, "ClaudeUsage");
+                Directory.CreateDirectory(dir);
+                
+                var config = new
                 {
-                    _sessionKey = Decrypt(Convert.FromBase64String(keyStr));
-                }
-
-                var orgVal = Registry.GetValue(@"HKEY_CURRENT_USER\Software\ClaudeUsage", "OrgUuid", null);
-                if (orgVal is string orgStr)
-                {
-                    _orgUuid = Decrypt(Convert.FromBase64String(orgStr));
-                }
+                    sessionKey = sessionKey,
+                    orgUuid = orgUuid
+                };
+                
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(Path.Combine(dir, "config.json"), json);
             }
-            catch { /* Ignore errors */ }
-        }
-
-        private static byte[] Encrypt(string plainText)
-        {
-            return ProtectedData.Protect(Encoding.UTF8.GetBytes(plainText), null, DataProtectionScope.CurrentUser);
-        }
-
-        private static string Decrypt(byte[] encryptedData)
-        {
-            var bytes = ProtectedData.Unprotect(encryptedData, null, DataProtectionScope.CurrentUser);
-            return Encoding.UTF8.GetString(bytes);
+            catch
+            {
+                // Ignore errors saving credentials
+            }
         }
     }
 }

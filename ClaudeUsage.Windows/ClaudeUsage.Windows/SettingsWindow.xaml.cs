@@ -11,24 +11,29 @@ namespace ClaudeUsage.Windows
             InitializeComponent();
             _mainWindow = mainWindow;
             
-            // Load existing values if available (handled by MainWindow passing data or reading directly)
-            // For simplicity, we assume textboxes are empty initially or user re-enters
+            // Load existing credentials into text boxes
+            var appData = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
+            var configPath = System.IO.Path.Combine(appData, "ClaudeUsage", "config.json");
+            
+            if (System.IO.File.Exists(configPath))
+            {
+                var json = System.IO.File.ReadAllText(configPath);
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("sessionKey", out var sk))
+                    SessionKeyTextBox.Text = sk.GetString();
+                if (doc.RootElement.TryGetProperty("orgUuid", out var org))
+                    OrgUuidTextBox.Text = org.GetString();
+            }
         }
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
             var sessionKey = SessionKeyTextBox.Text.Trim();
-            var orgUuid = OrgUuidTextBox.Text.Trim();
-
-            if (string.IsNullOrEmpty(sessionKey))
-            {
-                MessageBox.Show("Session Key is required.", "Validation Error", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            MainWindow.SaveCredentials(sessionKey, string.IsNullOrEmpty(orgUuid) ? null : orgUuid);
+            var orgUuid = string.IsNullOrWhiteSpace(OrgUuidTextBox.Text) ? null : OrgUuidTextBox.Text.Trim();
             
-            MessageBox.Show("Settings saved! The usage will update shortly.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+            MainWindow.SaveCredentials(sessionKey, orgUuid);
+            
+            MessageBox.Show("Settings saved successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
             Close();
         }
 
