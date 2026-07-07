@@ -14,7 +14,7 @@ namespace ClaudeUsage
 {
     public partial class MainWindow : Window
     {
-        private Timer _refreshTimer;
+        private System.Timers.Timer _refreshTimer;
         private readonly HttpClient _httpClient = new();
         private string? _sessionKey;
         private string? _orgUuid;
@@ -52,7 +52,7 @@ namespace ClaudeUsage
 
         private void InitializeTimer()
         {
-            _refreshTimer = new Timer(30000); // Refresh every 30s
+            _refreshTimer = new System.Timers.Timer(30000); // Refresh every 30s
             _refreshTimer.Elapsed += async (s, e) => await RefreshUsageAsync();
             _refreshTimer.Start();
             _ = RefreshUsageAsync(); // Initial load
